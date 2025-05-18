@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Knowledge Graph Generator</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background-color: #1f4e79;
+      color: white;
+      padding: 15px 30px;
+      font-size: 24px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    aside {
+      width: 30%;
+      background-color: #f9f9f9;
+      padding: 20px;
+      border-right: 1px solid #ccc;
+      overflow-y: auto;
+    }
+
+    section#graph-container {
+      width: 70%;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #graph {
+      flex: 1;
+      padding: 20px;
+    }
+
+    #graph svg {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #ccc;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 10px;
+    }
+
+    textarea, input[type="text"], input[type="file"], select, button {
+      width: 100%;
+      margin-top: 5px;
+      padding: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #1f4e79;
+      color: white;
+      border: none;
+      margin-top: 15px;
+      cursor: pointer;
+      transition: background 0.2s;   /* smooth hover */
+    }
+
+    button:hover {
+      background-color: #163b5a;      /* darker on hover */
+    }
+
+    button:disabled {
+      background-color: #9db2c4;      /* grey while loading */
+      cursor: not-allowed;
+}
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #ccc;
+      border-top-color: #1f4e79;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 60px auto;
+    }
+
+    footer {
+      background-color: #1f4e79;
+      color: white;
+      padding: 5px 30px;
+      text-align: center;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <header>Knowledge Graph Generator</header>
+  <main>
+    <aside>
+      <form id="inputForm">
+        <label>Select Input Type:</label>
+        <select name="type" id="inputType">
+          <option value="text">Text</option>
+          <option value="url">URL</option>
+          <option value="pdf">PDF</option>
+        </select>
+
+        <div id="textInput">
+          <label>Enter Text:</label>
+          <textarea name="data" rows="6"></textarea>
+        </div>
+
+        <div id="urlInput" style="display: none;">
+          <label>Enter URL:</label>
+          <input type="text" name="data">
+        </div>
+
+        <div id="pdfInput" style="display: none;">
+          <label>Upload PDF:</label>
+          <input type="file" name="data">
+        </div>
+
+        <button type="submit">Generate Graph</button>
+        <button id="resetBtn" type="button">Reset</button>
+      </form>
+    </aside>
+
+    <section id="graph-container">
+      <div id="graph"></div>
+    </section>
+  </main>
+
+  <footer>© 2025 Knowledge Graph Generator by Aysha</footer>
+
+  <script>
+
+    const inputType = document.getElementById("inputType");
+    const textInput = document.getElementById("textInput");
+    const urlInput = document.getElementById("urlInput");
+    const pdfInput = document.getElementById("pdfInput");
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('inputForm').reset();
+      document.getElementById('graph').innerHTML = '';
+    });
+
+    inputType.addEventListener("change", () => {
+      textInput.style.display = "none";
+      urlInput.style.display = "none";
+      pdfInput.style.display = "none";
+
+      const selected = inputType.value;
+      if (selected === "text") textInput.style.display = "block";
+      else if (selected === "url") urlInput.style.display = "block";
+      else if (selected === "pdf") pdfInput.style.display = "block";
+    });
+
+  document.getElementById("inputForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector("button");
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Generating…";
+    document.getElementById("graph").innerHTML =
+        '<div class="spinner"></div><p style="text-align:center">Graph loading…</p>';
+
+
+    const formData = new FormData(form);
+    const type = form.type.value;
+
+    // if (type === "text" || type === "url") {
+    //   formData.set("data", form.querySelector(`[name="data"]`).value);
+    // }
+    if (type === "text") {
+      formData.set("data", textInput.querySelector("textarea").value);
+    } else if (type === "url") {
+      formData.set("data", urlInput.querySelector("input").value);
+    }
+    else if (type === "pdf") {
+      const fileInput = pdfInput.querySelector("input[type='file']");
+      if (fileInput.files.length > 0) {
+        formData.set("data", fileInput.files[0]);
+      } else {
+        alert("Please select a PDF file.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Generate Graph";
+        return;
+      }
+    }
+// console.log("→ Submitting to /extract with:", {
+//   type,
+//   data:
+//     type === "text"
+//       ? textInput.querySelector("textarea").value
+//       : type === "url"
+//       ? urlInput.querySelector("input").value
+//       : pdfInput.querySelector("input[type=file]").files[0].name,
+// });
+    const controller = new AbortController();
+    // abort after 10s
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 1000000);
+
+    // try {
+    //   const response = await fetch("/extract", {
+    //     method: "POST",
+    //     body: formData,
+    //   });
+
+    //   const result = await response.json();
+    //   console.log("✅ Raw Structured JSON:", result.structured_json);
+
+    //   let data;
+    //   try {
+    //     data = JSON.parse(result.structured_json);
+    //     console.log("✅ JSON parsed successfully.");
+    //     renderGraph(data);
+    //     console.log("✅ Graph generated.");
+    //   } catch (parseErr) {
+    //     console.error("❌ Failed to parse JSON:", parseErr);
+    //     document.getElementById("graph").innerHTML =
+    //       "<p style='color:red'>❌ Invalid JSON returned. Check console for details.</p>";
+    //   }
+    // } catch (err) {
+    //   console.error("❌ Fetch or server error:", err);
+    //   document.getElementById("graph").innerHTML =
+    //     "<p style='color:red'>❌ Server error occurred. Check console for more info.</p>";
+    // }
+    try {
+      // console.log("⏳ About to fetch with signal", controller.signal);
+      const response = await fetch("/extract", { method: "POST", body: formData, signal: controller.signal });
+      // console.log("✅ fetch returned", response.timeoutId);
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+
+      if (response.status === 204) {
+        document.getElementById("graph").innerHTML =
+          "<p style='color:red'>❌ No data found. Please check your input.</p>";
+        return;
+      }
+      const result = await response.json();
+      const data = JSON.parse(result.structured_json);
+      renderGraph(data);
+  } catch (err) {
+      if (err.name === "AbortError") {
+        document.getElementById("graph").innerHTML =
+          "<p style='color:red'>❌ Taking too long—please try a shorter URL or smaller text.</p>";
+      } else {
+        console.error(err);
+        document.getElementById("graph").innerHTML =
+          "<p style='color:red'>❌ Error: " + err.message + "</p>";
+      }
+      
+  } finally {
+      clearTimeout(timeoutId);
+
+    /* ▼ reset button regardless of outcome */
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Generate Graph";
+  }
+  
+  });
+
+  function renderGraph(data) {
+    document.getElementById("graph").innerHTML = "";
+    // const width = 800, height = 500;
+    const container = document.getElementById("graph");
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+        const svg = d3.select("#graph")
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height)
+
+    const nodes = data.entities.map(e => ({ id: e.id, label: e.name, group: e.type }));
+    const links = data.relations.map(r => ({
+      source: r.source,
+      target: r.target,
+      label: r.relation
+    }));
+
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("collide", d3.forceCollide(40)) 
+      .force("center", d3.forceCenter(width / 2, height / 2));
+      
+    const link = svg.append("g")
+      .selectAll("line")
+      .data(links)
+      .join("line")
+      .attr("stroke", "#999")
+      .attr("stroke-width", 2);
+
+    const linkLabel = svg.append("g")
+      .selectAll("text")
+      .data(links)
+      .join("text")
+      .attr("class", "link-label")
+      .attr("font-size", 12)
+      .attr("fill", "#555")
+
+      .attr("text-anchor", "middle")
+      .text(d => d.label);
+
+    const node = svg.append("g")
+      .selectAll("circle")
+      .data(nodes)
+      .join("circle")
+      .attr("r", 20)
+      .attr("fill", d => d.group === "Organization" ? "#1f77b4" : "#ff7f0e")
+      .call(drag(simulation));
+
+    const label = svg.append("g")
+      .selectAll("text")
+      .data(nodes)
+      .join("text")
+      .text(d => d.label)
+      .attr("x", 6)
+      .attr("y", 3);
+
+    simulation.on("tick", () => {
+      link.attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      linkLabel
+        .attr("x", d => (d.source.x + d.target.x) / 2)
+        .attr("y", d => (d.source.y + d.target.y) / 2);
+
+      node.attr("cx", d => d.x).attr("cy", d => d.y);
+      label.attr("x", d => d.x + 25).attr("y", d => d.y);
+    });
+
+    function drag(simulation) {
+      return d3.drag()
+        .on("start", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        });
+    }
+  }
+</script>
+
+</body>
+</html>
